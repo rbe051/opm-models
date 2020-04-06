@@ -22,10 +22,10 @@
 */
 /*!
  * \file
- * \ingroup FiniteVolumeDiscretizations
+ * \ingroup MultiDomain
  *
  * \brief Declare the properties used by the infrastructure code of
- *        the finite volume discretizations.
+ *        the multidomain models.
  */
 #ifndef EWOMS_MULTI_DOMAIN_PROPERTIES_HH
 #define EWOMS_MULTI_DOMAIN_PROPERTIES_HH
@@ -61,20 +61,8 @@ SET_INT_PROP(MultiDomain, GridGlobalRefinements, 0);
 SET_TYPE_PROP(MultiDomain, Linearizer, Opm::MultiDomainLinearizer< TypeTag >);
 SET_TYPE_PROP(MultiDomain, GridView, typename GET_PROP_TYPE(TypeTag, Grid)::LeafGridView);
 
-/* 
-SET_TYPE_PROP(MultiDomain, Scalar, GET_PROP_TYPE(TypeTag, SubTypeTag)::template Scalar);
-SET_TYPE_PROP(MultiDomain, JacobianMatrix, GET_PROP_TYPE(TypeTag, SubTypeTag)::template JacobianMatrix);
-SET_TYPE_PROP(MultiDomain, SolutionVector, GET_PROP_TYPE(TypeTag, SubTypeTag)::template SolutionVector); */
-
-//SET_TYPE_PROP(MultiDomain, SubTypeTag, MultiDomainProperties<TypeTag>);
 END_PROPERTIES
-//! the scalar type
 
-//! the solution vector type
-//using SolutionVector = typename makeFromIndexedType<Dune::MultiTypeBlockVector, SubDomainSolutionVector, Indices>::type;
-
-//! the jacobian type
-//using JacobianMatrix = typename Detail::MultiDomainMatrixType<SubDomainJacobianMatrix, Indices, Scalar>::type;
 
 namespace Opm
 {
@@ -99,7 +87,7 @@ struct isBCRSMatrix<Dune::BCRSMatrix<T>> : public std::true_type
 {
 };
 
-//! a helper class to create a multitype matrix given the diagonal matrix blocks
+//! Helper class to create a multitype matrix given the diagonal matrix blocks
 template <class Scalar, class... JacobianBlocks>
 class createMultiTypeBlockMatrixType
 {
@@ -174,6 +162,7 @@ struct MultiDomainMatrixType
     using type = typename makeFromIndexedType<M, SubDomainDiagBlocks, Indices>::type;
 };
 
+// Helper alias to access the subtypes of all subdomains
 template <typename... SubDomainTypeTags>
 struct MultiDomainProperties
 {
@@ -268,6 +257,7 @@ public:
     using TupleOfSharedPtrConst = typename MultiDomainTupleSharedPtrConst<T, Indices>::type;
 };
 
+// Helper alias to access the subtypes of all subdomain couplings
 template <typename... SubCouplerTypeTags>
 struct MultiCouplerProperties
 {

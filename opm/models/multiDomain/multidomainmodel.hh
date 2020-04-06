@@ -23,7 +23,7 @@
 /*!
  * \file
  *
- * \copydoc Opm::MultiDomainModel
+ * \copydoc Opm::MultiDomainBaseModel
  */
 #ifndef OPM_Multi_DOMAIN_MODEL
 #define OPM_Multi_DOMAIN_MODEL
@@ -51,7 +51,11 @@ namespace Opm
 /*!
  * \ingroup MultiDomainModel
  *
- * \brief The base class for the  multidomain model
+ * \brief The base class for the  multidomain model.
+ * 
+ * A multidomain model consist of several subdomains which are initiated as
+ * standard OPM models. This class is a container to initiate, couple, and
+ * access all submodels.
  * 
 */
 template <class TypeTag>
@@ -83,7 +87,6 @@ public:
             std::get<domainI>(simulators_).reset(new Simulator<domainI>());
         });
 
-        //const auto & mortarView
         forEach(integralRange(Dune::Hybrid::size(couplers_)), [&](const auto couplerK) {
             typename CouplerSubDomain<couplerK>::IndexI I;
             typename CouplerSubDomain<couplerK>::IndexJ J;
@@ -94,7 +97,20 @@ public:
 
         linearizer_->init(simulators_, couplers_);
     }
+    
+    /*!
+     * \brief Returns the operator linearizer for the global jacobian of
+     *        the problem.
+     */
+    Linearizer &linearizer()
+    {
+        return *linearizer_;
+    }
 
+    /*!
+     * \brief Applies the initial solution for all degrees of freedom to which the model
+     *        applies.
+     */
     void applyInitialSolution()
     {
         using namespace Dune::Hybrid;
@@ -102,8 +118,9 @@ public:
             std::get<domainI>(simulators_)->model().applyInitialSolution();
         });
     }
+
     /*!
-     * \brief Reference to the solution at a given history index as a block vector.
+     * \brief Reference to the solution at a given history index as a multiple type block vector.
      *
      * \param timeIdx The index of the solution used by the time discretization.
      */
@@ -117,16 +134,10 @@ public:
         return solution_;
     }
 
-    Linearizer &linearizer()
-    {
-        return *linearizer_;
-    }
-
-    void update()
-    {
-        linearizer().linearize();
-    }
-    bool storeIntensiveQuantities()
+    /*!
+     * \brief Returns true if the cache for intensive quantities is enabled
+     */
+    bool storeIntensiveQuantities() const
     {
         bool store = false;
         using namespace Dune::Hybrid;
@@ -135,6 +146,7 @@ public:
         });
         return store;
     }
+
     /*!
      * \brief Invalidate the whole intensive quantity cache for time index.
      *
@@ -148,6 +160,13 @@ public:
         });
     }
 
+    /*!
+     * \brief Called by the problem if a time integration was
+     *        successful, post processing of the solution is done and
+     *        the result has been written to disk.
+     *
+     * This should prepare the model for the next time integration.
+     */
     void advanceTimeLevel()
     {
         using namespace Dune::Hybrid;
@@ -155,6 +174,7 @@ public:
             std::get<domainI>(simulators_)->model().advanceTimeLevel();
         });
     }
+
     /*!
      * \brief Set the current time step size to a given value.
      *
@@ -235,7 +255,6 @@ public:
      */
     static void registerParameters()
     {
-        //static function can not access numDomains member. Make it static?
         Dune::index_constant<SubTypes::numSubDomains> tempNum;
         using namespace Dune::Hybrid;
         forEach(integralRange(tempNum), [&](const auto domainI) {
@@ -247,17 +266,27 @@ public:
         });
     }
 
+    /*!
+     * \brief Get the simulator of subdomain i.
+     */
     template <std::size_t i>
     Simulator<i> &simulator()
     {
         return *std::get<i>(simulators_);
     }
+
+    /*!
+     * \brief Get the model of subdomain i.
+     */
     template <std::size_t i>
     Model<i> &model()
     {
         return std::get<i>(simulators_)->model();
     }
 
+    /*!
+     * \brief Assign the subdomain solutions from a global solution vector.
+     */
     void setSolution(GlobalSolutionVector vec)
     {
         using namespace Dune::Hybrid;
@@ -273,12 +302,15 @@ public:
         });
     }
 
+    /*!
+     * \brief Write the relevant secondary variables of the current
+     *        solution into an VTK output file.
+     */
     void writeOutput()
     {
         using namespace Dune::Hybrid;
         forEach(integralRange(numDomains), [&](const auto domainI) {
-            if (domainI<2)
-                std::get<domainI>(simulators_)->problem().writeOutput(domainI);
+            std::get<domainI>(simulators_)->problem().writeOutput(domainI);
         });
     }
 
