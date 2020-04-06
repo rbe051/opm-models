@@ -195,7 +195,7 @@ public:
         curTime_ = t;
         curOutFileName_ = fileName_();
 
-        curWriter_ = new VtkWriter(gridView_, Dune::VTK::conforming);
+        curWriter_ = new VtkWriter(gridView_, Dune::VTK::nonconforming);
         ++curWriterNum_;
     }
 

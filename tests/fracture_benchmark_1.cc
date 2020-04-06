@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     model.applyInitialSolution();
     auto &solution = model.solution(0);
     // Calculate jacobian and residual
-    model.update();
+    model.linearizer().linearize();
     auto &jac = model.linearizer().jacobian();
     auto &res = model.linearizer().residual();
 
