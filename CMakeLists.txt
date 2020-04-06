@@ -183,7 +183,8 @@ opm_add_test(finger_immiscible_ecfv_adaptive
              NO_COMPILE
              TEST_ARGS --enable-grid-adaptation=true --end-time=25e3)
 
-foreach(tapp co2injection_flash_ni_vcfv
+foreach(tapp fracture_benchmark_1
+             co2injection_flash_ni_vcfv
              co2injection_flash_ni_ecfv
              co2injection_flash_vcfv
              co2injection_flash_ecfv
