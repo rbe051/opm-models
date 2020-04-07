@@ -23,7 +23,7 @@
 /*!
  * \file
  *
- * \copydoc Opm::FvBaseElementContext
+ * \copydoc Opm::CouplingElementContext
  */
 #ifndef EWOMS_COUPLING_ELEMENT_CONTEXT_HH
 #define EWOMS_COUPLING_ELEMENT_CONTEXT_HH
@@ -51,10 +51,11 @@ namespace Opm
 {
 
 /*!
- * \ingroup FiniteVolumeDiscretizations
+ * \ingroup multiDomain
  *
  * \brief This class stores an array of IntensiveQuantities objects, one
- *        intensive quantities object for each of the element's vertices
+ *        intensive quantities object for each of the two subdomains the mortar
+ *        element couples.
  */
 template <class TypeTag>
 class CouplingElementContext // : public FvBaseElementContext<TypeTag>
@@ -128,8 +129,6 @@ public:
         stencil_.update(elem);
         std::get<0>(subElemContext).updateStencil(stencil_.template subElement<0>(0));
         std::get<1>(subElemContext).updateStencil(stencil_.template subElement<1>(0));
-
-        // resize the arrays containing the flux and the volume variables
     }
 
     /*!
@@ -146,6 +145,11 @@ public:
         // update the finite element geometry
         stencil_.updatePrimaryTopology(elem);
     }
+
+    /*!
+     * \brief Compute the intensive quantities of all sub-control volumes of the current
+     *        element for all time indices.
+     */
     void updateAllIntensiveQuantities()
     {
         if (!enableStorageCache_)
@@ -213,9 +217,20 @@ public:
     template<class PrimaryVariables>
     void updateIntensiveQuantities(const PrimaryVariables &priVars, unsigned dofIdx, unsigned timeIdx)
     {
-        throw std::logic_error("Primary variables on the mortar is not implemented");
+        throw std::logic_error("NotImplemented: updateIntensiveQuantities() is not implemented for coupling element context");
     }
 
+    /*!
+     * \brief Return a reference to the intensive quantities of a
+     *        sub-control volume of a subdomain at a given time.
+     *
+     * If the time step index is not given, return the volume
+     * variables for the current time. Template parameter defines which subdomain
+     * intensive quantities to be returned.
+     *
+     * \param dofIdx The local index of the degree of freedom in the current element.
+     * \param timeIdx The index of the solution vector used by the time discretization.
+     */
     template<std::size_t i>
     const IntensiveQuantities<i>& intensiveQuantities(unsigned dofIdx, unsigned timeIdx) const
     {
@@ -230,6 +245,7 @@ public:
 
         return subCtx.intensiveQuantities(dofIdx, timeIdx);
     }
+
     /*!
      * \brief Sets the degree of freedom on which the simulator is currently "focused" on
      *
@@ -241,7 +257,8 @@ public:
     {
         focusDofIdx_ = dofIdx;
     }
-        /*!
+    
+    /*!
      * \brief Returns the degree of freedom on which the simulator is currently "focused" on
      *
      * \copydetails setFocusDof()
@@ -259,6 +276,7 @@ public:
     {
         return stencil_;
     }
+
     /*!
      * \brief Return the number of sub-control volumes of the current element.
      */
@@ -266,8 +284,11 @@ public:
     {
         return stencil(timeIdx).numDof();
     }
+
     /*!
-     * \brief Return the global spatial index for a sub-control volume
+     * \brief Return the global spatial index for a sub-control volume of a subdomain
+     * 
+     * The template parameter defines which subdomain the global index referes to.
      *
      * \param dofIdx The local index of the degree of freedom
      *               in the current element.
@@ -279,6 +300,7 @@ public:
     {
         return std::get<i>(subElemContext).globalSpaceIndex(dofIdx, timeIdx);
     }
+
     /*!
      * \brief Return the number of primary degrees of freedom of the current element.
      */

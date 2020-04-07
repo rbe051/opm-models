@@ -39,9 +39,13 @@ namespace Opm
  * \brief Represents the stencil (finite volume geometry) of a single
  *        mortar element in the ECFV discretization.
  *
+ * This stencil couple two domains of the same dimension. For a mixed
+ * dimensional coupling, see EcfvMixedDimStencil.
+ * 
  * The ECFV discretization is a element centered finite volume
  * approach. This means that each element corresponds to a control
- * volume.
+ * volume. It is assumed that the discretization stencil of the
+ * two subdomains are also ecfv.
  */
 template <class Scalar,
           class GridView,
@@ -49,9 +53,8 @@ template <class Scalar,
           class SubTypeTag,
           bool needFaceIntegrationPos = true,
           bool needFaceNormal = true>
-class EcfvCouplingStencil //: public EcfvStencil<Scalar, GridView, needFaceIntegrationPos, needFaceNormal>
+class EcfvCouplingStencil 
 {
-    //typedef EcfvStencil<Scalar, GridView, needFaceIntegrationPos, needFaceNormal> ParentType;
     enum
     {
         dimWorld = GridView::dimensionworld
@@ -70,27 +73,12 @@ class EcfvCouplingStencil //: public EcfvStencil<Scalar, GridView, needFaceInteg
     template <std::size_t i>
     using WorldVector = typename Dune::FieldVector<Scalar, dimWorld>;
 
-    // typedef typename GridView::ctype CoordScalar;
-    // typedef typename GridView::template Codim<0>::Entity Element;
-    // template <std::size_t i>
-    // using SubGridView = typename SubTypeTag::template GridView<i>;
-    // template <std::size_t i>
-    // using SubElement = typename SubGridView<i>::template Codim<0>::Entity;
-    // template <std::size_t i>
-    // using Intersection = typename SubGridView<i>::Intersection;
-
-    // typedef Dune::FieldVector<CoordScalar, dimWorld> GlobalPosition;
-
-    // typedef Dune::FieldVector<Scalar, dimWorld> WorldVector;
-
 public:
     /*!
      * \brief Represents a sub-control volume.
      *
      * For element centered finite volumes, this is equivalent to the
-     * element, in the vertex centered finite volume approach, this
-     * corresponds to the intersection of a finite volume and the
-     * grid element.
+     * element
      */
     template <int i>
     class SubControlVolume
@@ -151,12 +139,10 @@ public:
     };
 
     /*!
-     * \brief Represents a sub-control volume.
+     * \brief Represents a sub-control volume Face.
      *
      * For element centered finite volumes, this is equivalent to the
-     * element, in the vertex centered finite volume approach, this
-     * corresponds to the intersection of a finite volume and the
-     * grid element.
+     * intersection
      */
     template <bool needIntegrationPos, bool needNormal, int i>
     class CouplingSubControlVolumeFace
@@ -246,6 +232,11 @@ public:
         assert(int(gridView.size(/*codim=*/0)) == int(elementMapper_.size()));
     }
 
+    /*!
+     * \brief update the topology from a mortar element
+     * 
+     * The topology consist of the two subdomain elements that the mortar element couples.
+     */
     void updateTopology(const MortarElement &element)
     {
         mortarElement_ = element;
@@ -276,12 +267,18 @@ public:
     /*!
      * \brief Returns the number of degrees of freedom which the
      *        current element interacts with.
+     * 
+     * We assume that the mortar stencil couples exactly two dofs
      */
     size_t numDof() const
     {
         return 2;
     }
 
+    /*!
+     * \brief Returns the face object belonging to a given face index
+     *        in the interior of the domain.
+     */
     template <std::size_t i>
     const SubControlVolumeFace<i> &interiorFace(unsigned faceIdx) const
     {
@@ -300,9 +297,6 @@ public:
     /*!
      * \brief Return the element given the index of a degree of
      *        freedom.
-     *
-     * If no degree of freedom index is passed, the element which was
-     * passed to the update() method is returned...
      */
     const MortarElement &element(unsigned dofIdx) const
     {
@@ -313,9 +307,6 @@ public:
     /*!
      * \brief Return the element given the index of a degree of
      *        freedom.
-     *
-     * If no degree of freedom index is passed, the element which was
-     * passed to the update() method is returned...
      */
     template <std::size_t i>
     const SubElement<i> &subElement(unsigned dofIdx) const
@@ -331,16 +322,12 @@ public:
      * Primary DOFs are always expected to have a lower index than
      * "secondary" DOFs.
      *
-     * For element centered finite elements, this is only the central DOF.
+     * For element centered finite elements, this is only the two central DOFs.
      */
     size_t numPrimaryDof() const
     {
         return 2;
     }
-    /*!
-     * \brief Return the global space index given the index of a degree of
-     *        freedom.
-     */
 
 protected:
     const GridView &gridView_;
@@ -352,6 +339,21 @@ protected:
     std::tuple<std::unique_ptr<SubControlVolume<0>>, std::unique_ptr<SubControlVolume<1>>> subControlVolumes_;
 };
 
+/*!
+ * \ingroup multiDomain
+ *
+ * \brief Represents the stencil (finite volume geometry) of a single
+ *        mortar element in the ECFV discretization.
+ *
+ * This stencil couple two domains of different dimensions. The first
+ * domain is assumed to have a dimension exactly one more than the 
+ * mortar grid and second domain.
+ * 
+ * The ECFV discretization is a element centered finite volume
+ * approach. This means that each element corresponds to a control
+ * volume. It is assumed that the discretization stencil of the
+ * two subdomains are also ecfv.
+ */
 template <class Scalar,
           class GridView,
           class Mapper,
@@ -366,6 +368,11 @@ class EcfvMixedDimStencil : public EcfvCouplingStencil<Scalar, GridView, Mapper,
 public:
     using ParentType::ParentType;
 
+    /*!
+     * \brief update the topology from a mortar element
+     * 
+     * The topology consist of the two subdomain elements that the mortar element couples.
+     */
     void updateTopology(const MortarElement &element)
     {
         this->mortarElement_ = element;

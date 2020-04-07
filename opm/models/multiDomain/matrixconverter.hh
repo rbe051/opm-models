@@ -18,8 +18,9 @@
  *****************************************************************************/
 /*!
  * \file
- * \ingroup Linear
+ * \ingroup multiDomain
  * \brief A helper classe that converts a Dune::MultiTypeBlockMatrix into a plain Dune::BCRSMatrix
+ * This code is mostly borrowed from the DuMuX multidomain module: https://dumux.org/
  */
 #ifndef OPM_MATRIX_CONVERTER
 #define OPM_MATRIX_CONVERTER
@@ -37,7 +38,7 @@
 namespace Opm {
 
 /*!
- * \ingroup Linear
+ * \ingroup multiDomain
  * \brief A helper classe that converts a Dune::MultiTypeBlockMatrix into a plain Dune::BCRSMatrix
  * TODO: allow block sizes for BCRSMatrix other than 1x1 ?
  *
@@ -194,7 +195,7 @@ private:
 };
 
 /*!
- * \ingroup Linear
+ * \ingroup multiDomain
  * \brief A helper classe that converts a Dune::MultiTypeBlockVector into a plain Dune::BlockVector and transfers back values
  */
 template<class MultiTypeBlockVector, class Scalar=double>
@@ -274,6 +275,6 @@ private:
     }
 };
 
-} // end namespace Dumux
+} // end namespace Opm
 
 #endif
