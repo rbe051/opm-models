@@ -24,12 +24,11 @@
  * \file
  * \ingroup MultiDomain
  *
- * \brief 
+ * \brief Class that handles the mappings between domains
  */
 
 namespace Opm
 {
-
 /*!
  * \ingroup MultiDomainModel
  *
