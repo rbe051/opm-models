@@ -350,10 +350,10 @@ private:
     template <std::size_t k, class Set>
     void addCouplerPattern_(bool swap, Set &sparsityPattern)
     {
-        const auto &model0 = coupler_<k>().template model0();
-        const auto &model1 = coupler_<k>().template model1();
+        const auto &model0 = coupler_<k>().template model<0>();
+        const auto &model1 = coupler_<k>().template model<1>();
         const auto &mortarView = coupler_<k>().mortarView();
-        const auto &map = coupler_<k>().map_;
+        const auto &map = coupler_<k>().projectionMapper();
         // find out the global indices of the neighboring degrees of
         // freedom of each primary degree of freedom
         typedef std::set<unsigned> NeighborSet;
@@ -368,10 +368,10 @@ private:
         {
             const auto idx = idxSet.index(elem);
 
-            const auto element0 = map->template toElement<0>(elem);
+            const auto element0 = map.template toElement<0>(elem);
             unsigned elIdx0 = model0.gridView().indexSet().index(element0);
 
-            const auto element1 = map->template toElement<1>(elem);
+            const auto element1 = map.template toElement<1>(elem);
             unsigned elIdx1 = model1.gridView().indexSet().index(element1);
             if (!swap)
                 sparsityPattern[elIdx0].insert(elIdx1);

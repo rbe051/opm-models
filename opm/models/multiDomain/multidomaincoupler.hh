@@ -1,3 +1,31 @@
+// -*- mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+// vi: set et ts=4 sw=4 sts=4:
+/*
+  This file is part of the Open Porous Media project (OPM).
+
+  OPM is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 2 of the License, or
+  (at your option) any later version.
+
+  OPM is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with OPM.  If not, see <http://www.gnu.org/licenses/>.
+
+  Consult the COPYING file in the top-level source directory of this
+  module for the precise wording of the license and the list of
+  copyright holders.
+*/
+/*!
+ * \file
+ *
+ * \copydoc Opm::DarcyCoupler
+ */
+
 #ifndef OPM_MULTI_DOMAIN_COUPLER_HH
 #define OPM_MULTI_DOMAIN_COUPLER_HH
 
@@ -16,10 +44,6 @@ namespace Opm
 {
 template <class TypeTag>
 class DarcyCoupler;
-
-template <class TypeTag>
-class VoidClass;
-
 } // namespace Opm
 
 BEGIN_PROPERTIES
@@ -58,11 +82,27 @@ END_PROPERTIES
 
 namespace Opm
 {
-template <class TypeTag>
-class VoidClass
-{
-};
 
+/*!
+ * \ingroup MultiDomainModel
+ *
+ * \brief Couple two domains in a multidomain model
+ * 
+ * A multidomain model consist of several subdomains which are initiated as
+ * standard OPM models. This class defines the coupling between two subdomains
+ * by a Darcy law. The class allows for two different types of coupling: the
+ * first is between two domains of equal dimension through a shared interface.
+ * The second is between a higher dimensional domain and a lower-dimensional
+ * domain (fracture). The mortar grid is associated with the coupler.
+ * 
+ * The Darcy coupler does to some extent act as a Simulator class for the
+ * standard models. However, it is also responsible for discretization, linearization
+ * and problem definition. This will in the feature be split into different classes.
+ * 
+ * You should not expect the DarcyCoupler to work for anything else than immicible
+ * models.
+ * 
+*/
 template <class TypeTag>
 class DarcyCoupler
 {
@@ -109,6 +149,7 @@ public:
     DarcyCoupler(Simulator<0> &simulator0, Simulator<1> &simulator1)
         : simulator0_{simulator0}, simulator1_{simulator1}
     {
+        // We check that the two subproblems have the same number of phases.
         if (GET_PROP_VALUE(typename SubTypeTag::template SubDomain<0>::TypeTag, NumPhases) !=
             GET_PROP_VALUE(typename SubTypeTag::template SubDomain<1>::TypeTag, NumPhases))
             throw std::runtime_error("Not implemented: Can only couple two models with the same number of faces ");
@@ -120,6 +161,22 @@ public:
         finalizeInit_();
     }
 
+    static void registerParameters()
+    {
+        Vanguard::registerParameters();
+        EWOMS_REGISTER_PARAM(TypeTag, std::string, MappingFile,
+                             "The file name of the mapping file to load");
+    }
+
+    /*!
+     * \brief Return the volume flux of a fluid phase at the mortar cell's integration point
+     *        \f$[m^3/s / m^2]\f$
+     *
+     * This is the fluid volume of a phase per second and per square meter of face
+     * area.
+     *
+     * \param elemCtx The element context of the mortar cell
+     */
     void volumeFlux(const CouplingElementContext &elemCtx)
     {
         const auto &stencil = elemCtx.stencil(/*timeIdx=*/0);
@@ -128,22 +185,24 @@ public:
         for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx)
         {
             flux_[phaseIdx] = 0.0;
-            Evaluation pL;
-            Evaluation pR;
+            Evaluation p0; // Pressure in model 0
+            Evaluation p1; // Pressure in model 1
+
+            // Only carry along the derivative from the model we focus on
             if (focusDofIdx == 0)
             {
-                pL = elemCtx.template intensiveQuantities<0>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx);
-                pR = Opm::getValue(elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx));
+                p0 = elemCtx.template intensiveQuantities<0>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx);
+                p1 = Opm::getValue(elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx));
             }
             else if (focusDofIdx == 1)
             {
-                pL = Opm::getValue(elemCtx.template intensiveQuantities<0>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx));
-                pR = elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx);
+                p0 = Opm::getValue(elemCtx.template intensiveQuantities<0>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx));
+                p1 = elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).fluidState().pressure(phaseIdx);
             }
             else
                 DUNE_THROW(Dune::NotImplemented, "Can only couple two degrees of freedom");
 
-            auto deltay = pL - pR;
+            auto deltay = p0 - p1;
 
             const auto &interiorPos = stencil.template subControlVolume<0>(0).globalPos();
             const auto &exteriorPos = stencil.template subControlVolume<1>(0).globalPos();
@@ -205,6 +264,8 @@ public:
             const auto K0 = elemCtx.template intensiveQuantities<0>(0, /*timeIdx=*/0).intrinsicPermeability();
             const auto K1 = elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).intrinsicPermeability();
 
+            // If the two subdomains have the same dimension, we calculate the permeability
+            // as the harmonic mean.
             if (Grid<0>::dimension == Grid<1>::dimension && Grid<0>::dimension != 1)
             {
                 // Entry-wise harmonic mean. this is almost certainly wrong if
@@ -215,14 +276,18 @@ public:
             }
             else
             {
-                // Harmonic average with permeabilities scaled by element size
+                // The harmonic mean is not sufficient when the two subdomains are of different dimension.
+                // We then have to scale the permeability by the distance to the interface (which for the
+                // lower-dimensional domain is equal the aperture / 2).
                 K = K0;
                 K *= K1[0][0];
-                K *= 1;
                 Scalar ndotDist = 0.0;
+                Scalar extrusionFactor1 = elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).extrusionFactor();
+                Scalar aperture = std::pow(extrusionFactor1, Grid<1>::dimension - dimWorld);
+
                 for (unsigned dimIdx = 0; dimIdx < faceNormal.size(); ++dimIdx)
                     ndotDist += (exteriorPos[dimIdx] - interiorPos[dimIdx]) * faceNormal[dimIdx];
-                K /= K1[0][0] + K0[0][0] * 1e-4 / 2 * ndotDist / distSquared;
+                K /= K1[0][0] + K0[0][0] * aperture / 2 * ndotDist / distSquared;
             }
             EvalDimVector filterVelocity;
             K.mv(quantityGrad, filterVelocity);
@@ -230,6 +295,7 @@ public:
             for (unsigned i = 0; i < faceNormal.size(); ++i)
                 flux_[phaseIdx] += mobility * (filterVelocity[i] * faceNormal[i]);
 
+            // Scale the face area by the higher dimensional extrusion factor
             Scalar alpha = face.area() * elemCtx.template intensiveQuantities<0>(0, /*timeIdx=*/0).extrusionFactor();
             Opm::Valgrind::CheckDefined(alpha);
             assert(alpha > 0.0);
@@ -238,13 +304,12 @@ public:
         }
     }
 
-    void resetSystem_()
-    {
-        residual_ = 0.0;
-        // zero all matrix entries
-        jacobian_ = 0.0;
-    }
-
+    /*!
+     * \brief Linearize and calculate the residual and its jacobian
+     *
+     * The advective Jacobian and the residual is added to the coupling
+     * Jacobian and residual.
+     */
     void advectiveFluxCoupling()
     {
         const auto &idxSet = mortarView().indexSet();
@@ -256,9 +321,6 @@ public:
         for (const auto &e : elements(mortarView()))
         {
             elemCtx.updateAll(e);
-            // elemCtx.updateStencil(e);
-            // elemCtx.updateAllIntensiveQuantities();
-            // elemCtx.updateAllExtensiveQuantities();
             // compute the local residual and its Jacobian
             unsigned numPrimaryDof = elemCtx.numPrimaryDof(/*timeIdx=*/0);
             for (unsigned focusDofIdx = 0; focusDofIdx < numPrimaryDof; ++focusDofIdx)
@@ -284,7 +346,7 @@ public:
                             jacobian_[_1][_0][globJ][globI][eqIdx][pvIdx] -= flux_[eqIdx].derivative(pvIdx);
                         }
                     }
-                    else
+                    else if (focusDofIdx == 1)
                     {
                         residual_[_1][globJ][eqIdx] -= Opm::getValue(flux_[eqIdx]);
 
@@ -294,14 +356,111 @@ public:
                             jacobian_[_1][_1][globJ][globJ][eqIdx][pvIdx] -= flux_[eqIdx].derivative(pvIdx);
                         }
                     }
+                    else
+                        std::logic_error("NotImplemented: advectiveFluxCoupling can only couple two dofs");
                 }
             }
         }
     }
 
-    // Construct the BCRS matrix for the Jacobian of the residual function
     /*!
-     * \brief Sets the jacobian build mode
+     * \brief Linearize the full system of non-linear equations.
+     *
+     * This means the spatial subdomains plus all auxiliary equations.
+     */
+    void linearize()
+    {
+        if (firstIteration_)
+        {
+            initFirstIteration_();
+        }
+        resetSystem_(); // reset the global linear system of equations.
+
+        // Linearize coupling
+        advectiveFluxCoupling();
+    }
+
+    /*!
+     * \brief Return reference to global Jacobian matrix backend.
+     */
+    JacobianMatrix &jacobian()
+    {
+        return jacobian_;
+    }
+
+    /*!
+     * \brief Return reference to global residual vector.
+     */
+    GlobalEqVector &residual()
+    {
+        return residual_;
+    }
+
+    /*!
+     * \brief Return the Dune::IndexConstant of coupling domain 0
+     */
+    template <std::size_t k, typename std::enable_if_t<(k == 0), int> = 0>
+    const auto subDomainIndex() const
+    {
+        DomainI K;
+        return K;
+    }
+
+    /*!
+     * \brief Return the Dune::IndexConstant of coupling domain 1
+     */
+    template <std::size_t k, typename std::enable_if_t<(k == 1), int> = 0>
+    const auto subDomainIndex() const
+    {
+        DomainJ K;
+        return K;
+    }
+
+    /*!
+     * \brief Return the mortar grid view for which the simulation is done
+     */
+    const MortarView &mortarView() const
+    {
+        return vanguard_->gridView();
+    }
+
+    /*!
+     * \brief Return the projection mapper of the coupling
+     */
+    const CouplingMapper& projectionMapper() const
+    {
+        return *map_;
+    }
+
+    /*!
+     * \brief Return the first model of the coupling
+     */
+    template <std::size_t k, typename std::enable_if_t<(k == 0), int> = 0>
+    const auto &model() const
+    {
+        return simulator0_.model();
+    }
+
+    /*!
+     * \brief Return the second model of the coupling
+     */
+    template <std::size_t k, typename std::enable_if_t<(k == 1), int> = 0>
+    const auto &model() const
+    {
+        return simulator1_.model();
+    }
+
+protected:
+    // reset the linear system of equations.
+    void resetSystem_()
+    {
+        residual_ = 0.0;
+        // zero all matrix entries
+        jacobian_ = 0.0;
+    }
+
+    /*!
+     * Set the jacobian build mode
      */
     void
     setJacobianBuildMode()
@@ -318,6 +477,7 @@ public:
         });
     }
 
+    // Set the sparcity pattern for a Jacobian matrix
     template <std::size_t i, std::size_t j, class Set>
     void reserve_(const std::vector<Set> &sparsityPattern)
     {
@@ -347,6 +507,7 @@ public:
         jacobian_[I][J].endindices();
     }
 
+    // Initialize the Jacobian matrix
     void createMatrix()
     {
         using namespace Dune::Hybrid;
@@ -357,6 +518,24 @@ public:
         });
     }
 
+    void initFirstIteration_()
+    {
+        firstIteration_ = false;
+        setJacobianBuildMode();
+        createMatrix();
+    }
+
+    void finalizeInit_()
+    {
+        const std::string mappingFileName = EWOMS_GET_PARAM(TypeTag, std::string, MappingFile);
+
+        if (mappingFileName.size() > 0)
+            map_.reset(new CouplingMapper(mappingFileName, mortarView(), simulator0_.gridView(), simulator1_.gridView()));
+        else
+            map_.reset(new CouplingMapper(mortarView(), simulator0_.gridView(), simulator1_.gridView()));
+    }
+
+    // Set the jacobian sparcity pattern
     template <std::size_t i, std::size_t j>
     void setJacobianPattern_(Dune::index_constant<i> I, Dune::index_constant<j> J)
     {
@@ -383,6 +562,7 @@ public:
         reserve_<i, j>(sparsityPattern);
     }
 
+    // Add the off diagonal part of the sparcity pattern
     template <std::size_t i, std::size_t j, class Set>
     void addOffDiagonalPattern_(std::vector<Set> &sparsityPattern)
     {
@@ -393,6 +573,8 @@ public:
 
         return;
     }
+
+    // Add the copuling pattern
     template <class Set>
     void addCouplerPattern_(bool swap, Set &sparsityPattern)
     {
@@ -401,9 +583,9 @@ public:
         typedef std::set<unsigned> NeighborSet;
         int numDofs;
         if (!swap)
-            numDofs = model0().numTotalDof();
+            numDofs = model<0>().numTotalDof();
         else
-            numDofs = model1().numTotalDof();
+            numDofs = model<1>().numTotalDof();
 
         const auto &idxSet = mortarView().indexSet();
         for (const auto &elem : elements(mortarView()))
@@ -411,10 +593,10 @@ public:
             const auto idx = idxSet.index(elem);
             //const auto face = model1().gridView().grid().entity(map_->[i][idx]);
             const auto element1 = map_->template toElement<0>(elem);
-            unsigned elIdx1 = model0().gridView().indexSet().index(element1);
+            unsigned elIdx1 = model<0>().gridView().indexSet().index(element1);
 
             const auto element2 = map_->template toElement<1>(elem);
-            unsigned elIdx2 = model1().gridView().indexSet().index(element2);
+            unsigned elIdx2 = model<1>().gridView().indexSet().index(element2);
             if (!swap)
                 sparsityPattern[elIdx1].insert(elIdx2);
             else
@@ -422,6 +604,8 @@ public:
         }
     }
 
+    // Add the diagonal sparsity patter. It is here assumed we have a cell-centered
+    // final volume discretization (tpfa).
     template <std::size_t i, class Set>
     void addDiagonalPattern_(std::vector<Set> &sparsityPattern) const
     {
@@ -455,110 +639,6 @@ public:
             model<i>().auxiliaryModule(auxModIdx)->addNeighbors(sparsityPattern);
     }
 
-    void linearize()
-    {
-        if (firstIteration_)
-        {
-            initFirstIteration_();
-        }
-        resetSystem_(); // reset the global linear system of equations.
-
-        // Linearize coupling
-        advectiveFluxCoupling();
-    }
-
-    void initFirstIteration_()
-    {
-        firstIteration_ = false;
-        setJacobianBuildMode();
-        createMatrix();
-    }
-
-    JacobianMatrix &jacobian()
-    {
-        return jacobian_;
-    }
-
-    GlobalEqVector &residual()
-    {
-        return residual_;
-    }
-
-    template <std::size_t i>
-    void printResidualBlock(Dune::index_constant<i> I)
-    {
-        std::cout << residual_[I] << std::endl;
-    }
-
-    template <std::size_t k, typename std::enable_if_t<(k == 0), int> = 0>
-    const auto subDomainIndex() const
-    {
-        DomainI K;
-        return K;
-    }
-    template <std::size_t k, typename std::enable_if_t<(k == 1), int> = 0>
-    const auto subDomainIndex() const
-    {
-        DomainJ K;
-        return K;
-    }
-    // std::size_t subDomainIndex(std::size_t k)
-    // {
-    //     if (k == 0)
-    //         return domainI_;
-    //     else if (k == 1)
-    //         return domainJ_;
-    //     else
-    //         assert(false);
-    // }
-    template <std::size_t k, typename std::enable_if_t<(k == 0), int> = 0>
-    const auto &model() const
-    {
-        return model0();
-    }
-    template <std::size_t k, typename std::enable_if_t<(k == 1), int> = 0>
-    const auto &model() const
-    {
-        return model1();
-    }
-
-    const auto &model0() const
-    {
-        return simulator0_.model();
-    }
-    const auto &model1() const
-    {
-        return simulator1_.model();
-    }
-    void finalizeInit_()
-    {
-        const std::string mappingFileName = EWOMS_GET_PARAM(TypeTag, std::string, MappingFile);
-
-        if (mappingFileName.size() > 0)
-            map_.reset(new CouplingMapper(mappingFileName, mortarView(), simulator0_.gridView(), simulator1_.gridView()));
-        else
-            map_.reset(new CouplingMapper(mortarView(), simulator0_.gridView(), simulator1_.gridView()));
-    }
-
-    /*!
-     * \brief Return the grid view for which the simulation is done
-     */
-    const MortarView &mortarView() const
-    {
-        return vanguard_->gridView();
-    }
-
-    static void registerParameters()
-    {
-        Vanguard::registerParameters();
-        EWOMS_REGISTER_PARAM(TypeTag, unsigned, GridGlobalRefinements,
-                             "The number of global refinements of the grid "
-                             "executed after it was loaded");
-        // EWOMS_REGISTER_PARAM(TypeTag, std::string, GridFile,
-        //                      "The file name of the file to load");
-        EWOMS_REGISTER_PARAM(TypeTag, std::string, MappingFile,
-                             "The file name of the mapping file to load");
-    }
     //private:
     Dune::index_constant<0> _0;
     Dune::index_constant<1> _1;
@@ -570,13 +650,11 @@ public:
     GlobalEqVector residual_;
     bool verbose_{true};
     std::unique_ptr<Vanguard> vanguard_;
-    //std::unique_ptr<Dune::OneDGrid> onedgrid_;
-    //std::unique_ptr<MortarView> mortarView_;
 
     Evaluation flux_[numPhases];
 
     bool firstIteration_{true};
-}; // namespace Opm
+};
 
 } // namespace Opm
 
