@@ -33,26 +33,20 @@ namespace Opm
 /*!
  * \ingroup MultiDomainModel
  *
- * \brief Class object to identify face to face projections between domains.
+ * \brief Virtual class object that defines the base for the multidomain mappers
  * 
- * This class finds and stores the projections from the faces of the subdomains
- * to the cells of the mortar grid.
- * ------- | -------
- * |grid0| | |grid1 |
- * |_____| | |______|
- *         ^       
- *     mortarGrid
+ * This class defines the functions that must be overloaded by the domain mappers
  * 
 */
 template <class TypeTag>
-class FaceFaceMapper
+class BaseMapper
 {
+    typedef typename GET_PROP_TYPE(TypeTag, CouplingMapper) Implementation;
     typedef typename GET_PROP_TYPE(TypeTag, GridView) MortarView;
     template <std::size_t i>
     using GridView = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template GridView<i>;
     template <std::size_t i>
     using Intersection = typename GridView<i>::Intersection;
-    typedef std::tuple<std::vector<Intersection<0>>, std::vector<Intersection<1>>> ElementMap;
     typedef typename MortarView::template Codim<0>::Entity MortarElement;
 
     enum
@@ -64,22 +58,17 @@ public:
     /*!
      * \brief The constructor. Read mapping from file.
      */
-    FaceFaceMapper(const std::string &file_name, const MortarView &mortarView, const GridView<0> &gridView0, const GridView<1> &gridView1)
+    BaseMapper(const std::string &file_name, const MortarView &mortarView, const GridView<0> &gridView0, const GridView<1> &gridView1)
         : mortarView_{mortarView}, gridView0_{gridView0}, gridView1_{gridView1}
     {
-        throw std::runtime_error("Not implemented: Can not read face face mapping from file");
     }
 
     /*!
      * \brief The constructor. Read find mapping by comparing geometry.
      */
-    FaceFaceMapper(const MortarView &mortarView, const GridView<0> &gridView1, const GridView<1> &gridView2)
+    BaseMapper(const MortarView &mortarView, const GridView<0> &gridView1, const GridView<1> &gridView2)
         : mortarView_{mortarView}, gridView0_{gridView1}, gridView1_{gridView2}
     {
-        std::get<0>(map_).resize(mortarView_.size(0));
-        std::get<1>(map_).resize(mortarView_.size(0));
-        findMap<0>(gridView0_);
-        findMap<1>(gridView1_, 1.0);
     }
 
     /*!
@@ -88,8 +77,7 @@ public:
     template <std::size_t i>
     const Intersection<i> toIntersection(MortarElement e) const
     {
-        const auto mortarIdx = mortarView_.indexSet().index(e);
-        return std::get<i>(map_)[mortarIdx];
+        throw std::logic_error("Not implemented:toIntersection() method not implemented by the actual mapper");
     }
 
     /*!
@@ -98,7 +86,7 @@ public:
     template <std::size_t i>
     const typename GridView<i>::template Codim<0>::Entity toElement(MortarElement e) const
     {
-        return toIntersection<i>(e).inside();
+        throw std::logic_error("Not implemented:toElement() method not implemented by the actual mapper");
     }
 
     /*!
@@ -121,24 +109,36 @@ public:
         case 1:
             return gridView1_.size(0);
         default:
-            throw std::runtime_error("FaceFaceMapper can only find the size of subdomain 0 or 1");
+            throw std::logic_error("Logic error:size() method can only find the size of subdomain 0 or 1");
         }
     }
 
-protected:
     /*!
-     * \brief Calculate the projections from intersections to mortar elements.
-     * 
-     * The projections are calculated by comparing the intersection centers with
-     * the cell centers. This assumes that the subdomain grids and mortar grid are
-     * matching.
+     * \brief Read the projections from subgrids to mortar elements from file.
      */
-    template <std::size_t i>
-    void findMap(const GridView<i> &gridView, double offset = 0)
+    void setMapFromFile(const std::string &file_name)
     {
-        const auto &idxSetMortar = mortarView_.indexSet();
+        throw std::logic_error("Not implemented:setMapFromFile() method not implemented by the actual mapper");
+    }
+
+    /*!
+     * \brief Calculate the projections from subgrids to mortar elements.
+     */
+    void calculateMap()
+    {
+        throw std::logic_error("Not implemented:calculateMap() method not implemented by the actual mapper");
+    }
+
+protected:
+    // Find the intersections of the gridView that matches the mortar elements
+    template <std::size_t i>
+    void calculateFaceMap_(const GridView<i> &gridView)
+    {
+        const auto &idxSetMortar = this->mortarView_.indexSet();
         const auto &idxSetGrid = gridView.indexSet();
-        for (const auto &mortarEle : elements(mortarView_))
+        auto &map = asImp_().projectionMap();
+
+        for (const auto &mortarEle : elements(this->mortarView_))
         {
             const auto &mc = mortarEle.geometry().center();
 
@@ -155,7 +155,7 @@ protected:
                     }
                     if (equal)
                     {
-                        std::get<i>(map_)[idxSetMortar.index(mortarEle)] = intersection;
+                        std::get<i>(map)[idxSetMortar.index(mortarEle)] = intersection;
                         foundMap = true;
                         break;
                     }
@@ -166,11 +166,182 @@ protected:
         }
     }
 
-public:
-    ElementMap map_;
+    // Find the elements of the gridView that matches the mortar elements. The gridView should
+    // have the same dimension as the mortar grid.
+    template <std::size_t i>
+    void calculateElementMap_(const GridView<i> &gridView)
+    {
+        const auto &idxSetMortar = this->mortarView_.indexSet();
+        const auto &idxSetGrid = gridView.indexSet();
+        auto &map = asImp_().projectionMap();
+
+        for (const auto &mortarEle : elements(this->mortarView_))
+        {
+            const auto &mc = mortarEle.geometry().center();
+            bool foundMap = false;
+            for (const auto &ele : elements(gridView))
+            {
+                const auto &fc = ele.geometry().center();
+                bool equal = true;
+                for (int dim = 0; dim < dimWorld; ++dim)
+                {
+                    equal = equal && (std::abs(fc[dim] - mc[dim]) < 1e-10);
+                }
+                if (equal)
+                {
+                    //map[idxSetMortar.index(e)] = idxSetGrid.index(facet);
+                    std::get<i>(map)[idxSetMortar.index(mortarEle)] = ele;
+                    foundMap = true;
+                    break;
+                }
+            }
+            if (!foundMap)
+            {
+                throw std::runtime_error("Could not find map. Are you sure the grids match?");
+            }
+        }
+    }
+
+    // This method should be called after the projection map has been allocated
+    void finalizeInit_(std::string file_name)
+    {
+        std::get<0>(asImp_().projectionMap()).resize(mortarView_.size(0));
+        std::get<1>(asImp_().projectionMap()).resize(mortarView_.size(0));
+        asImp_().setMapFromFile(file_name);
+    }
+
+    // This method should be called after the projection map has been allocated
+    void finalizeInit_()
+    {
+        std::get<0>(asImp_().projectionMap()).resize(mortarView_.size(0));
+        std::get<1>(asImp_().projectionMap()).resize(mortarView_.size(0));
+        asImp_().calculateMap();
+    }
+
+private:
+    //! Returns the implementation of the problem (i.e. static polymorphism)
+    Implementation &asImp_()
+    {
+        return *static_cast<Implementation *>(this);
+    }
+    //! \copydoc asImp_()
+    const Implementation &asImp_() const
+    {
+        return *static_cast<const Implementation *>(this);
+    }
+
+protected:
     const MortarView &mortarView_;
     const GridView<0> &gridView0_;
     const GridView<1> &gridView1_;
+};
+
+/*!
+ * \ingroup MultiDomainModel
+ *
+ * \brief Class object to identify face to face projections between domains.
+ * 
+ * This class finds and stores the projections from the faces of the subdomains
+ * to the cells of the mortar grid.
+ * ------- | -------
+ * |grid0| | |grid1 |
+ * |_____| | |______|
+ *         ^       
+ *     mortarGrid
+ * 
+*/
+template <class TypeTag>
+class FaceFaceMapper : public BaseMapper<TypeTag>
+{
+    typedef BaseMapper<TypeTag> ParentType;
+    typedef typename GET_PROP_TYPE(TypeTag, CouplingMapper) Implementation;
+
+    typedef typename GET_PROP_TYPE(TypeTag, GridView) MortarView;
+    template <std::size_t i>
+    using GridView = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template GridView<i>;
+    template <std::size_t i>
+    using Intersection = typename GridView<i>::Intersection;
+    typedef std::tuple<std::vector<Intersection<0>>, std::vector<Intersection<1>>> ElementMap;
+    typedef typename MortarView::template Codim<0>::Entity MortarElement;
+
+    enum
+    {
+        dimWorld = MortarView::dimensionworld
+    };
+
+public:
+    /*!
+     * \copydoc BaseMapper(const std::string &, const MortarView &, const GridView<0> &, const GridView<1> &)
+     */
+    FaceFaceMapper(const std::string &file_name, const MortarView &mortarView, const GridView<0> &gridView0, const GridView<1> &gridView1)
+        : ParentType(file_name, mortarView, gridView0, gridView1)
+    {
+        this->finalizeInit_(file_name);
+    }
+
+    /*!
+     * \copydoc BaseMapper(const MortarView &, const GridView<0> &, const GridView<1> &)
+     */
+    FaceFaceMapper(const MortarView &mortarView, const GridView<0> &gridView0, const GridView<1> &gridView1)
+        : ParentType(mortarView, gridView0, gridView1)
+    {
+        this->finalizeInit_();
+    }
+
+    /*!
+     * \copydoc BaseMapper::toIntersection
+     */
+    template <std::size_t i>
+    const Intersection<i> toIntersection(MortarElement e) const
+    {
+        const auto mortarIdx = this->mortarView_.indexSet().index(e);
+        return std::get<i>(map_)[mortarIdx];
+    }
+
+    /*!
+     * \copydoc BaseMapper::toElement
+     */
+    template <std::size_t i>
+    const typename GridView<i>::template Codim<0>::Entity toElement(MortarElement e) const
+    {
+        return toIntersection<i>(e).inside();
+    }
+
+    //! Returns the projection
+    ElementMap &projectionMap()
+    {
+        return map_;
+    }
+
+    /*!
+     * \brief Calculate the projections from intersections to mortar elements.
+     * 
+     * \copydoc BaseMapper::calculateMap
+     * 
+     * The projections are calculated by comparing the intersection centers with
+     * the cell centers. This assumes that the subdomain grids and mortar grid are
+     * matching.
+     */
+    void calculateMap()
+    {
+        this->template calculateFaceMap_<0>(this->gridView0_);
+        this->template calculateFaceMap_<1>(this->gridView1_);
+    }
+
+private:
+    //! Returns the implementation of the problem (i.e. static polymorphism)
+    Implementation &asImp_()
+    {
+        return *static_cast<Implementation *>(this);
+    }
+    //! \copydoc asImp_()
+    const Implementation &asImp_() const
+    {
+        return *static_cast<const Implementation *>(this);
+    }
+
+protected:
+    ElementMap map_;
 };
 
 /*!
@@ -189,8 +360,11 @@ public:
  * 
 */
 template <class TypeTag>
-class FaceElementMapper
+class FaceElementMapper : public BaseMapper<TypeTag>
 {
+    typedef BaseMapper<TypeTag> ParentType;
+    typedef typename GET_PROP_TYPE(TypeTag, CouplingMapper) Implementation;
+
     typedef typename GET_PROP_TYPE(TypeTag, GridView) MortarView;
     template <std::size_t i>
     using GridView = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template GridView<i>;
@@ -207,40 +381,45 @@ class FaceElementMapper
 
 public:
     /*!
-     * \brief The constructor. Read mapping from file.
+     * \copydoc BaseMapper(const std::string &, const MortarView &, const GridView<0> &, const GridView<1> &)
      */
     FaceElementMapper(const std::string &file_name, const MortarView &mortarView, const GridView<0> &gridView0, const GridView<1> &gridView1)
-        : mortarView_{mortarView}, gridView0_{gridView0}, gridView1_{gridView1}
+        : ParentType(file_name, mortarView, gridView0, gridView1)
     {
-        std::get<0>(map_).resize(mortarView_.size(0));
-        std::get<1>(map_).resize(mortarView_.size(0));
-        setMapFromFile(file_name);
+        this->finalizeInit_(file_name);
     }
 
     /*!
-     * \brief The constructor. Read find mapping by comparing geometry.
+     * \copydoc BaseMapper(const MortarView &, const GridView<0> &, const GridView<1> &)
      */
     FaceElementMapper(const MortarView &mortarView, const GridView<0> &gridView0, const GridView<1> &gridView1)
-        : mortarView_{mortarView}, gridView0_{gridView0}, gridView1_{gridView1}
+        : ParentType(mortarView, gridView0, gridView1)
     {
-        std::get<0>(map_).resize(mortarView_.size(0));
-        std::get<1>(map_).resize(mortarView_.size(0));
-        findMap();
+        this->finalizeInit_();
     }
 
+    /*!
+     * \copydoc BaseMapper::toIntersection
+     */
     template <std::size_t i, typename std::enable_if_t<(i == 0), int> = 0>
     const Intersection<i> toIntersection(MortarElement e) const
     {
-        const auto mortarIdx = mortarView_.indexSet().index(e);
+        const auto mortarIdx = this->mortarView_.indexSet().index(e);
         return std::get<i>(map_)[mortarIdx];
     }
 
+    /*!
+     * \copydoc BaseMapper::toElement
+     */
     template <std::size_t i, typename std::enable_if_t<(i == 0), int> = 0>
     const typename GridView<i>::template Codim<0>::Entity toElement(MortarElement e) const
     {
         return toIntersection<0>(e).inside();
     }
 
+    /*!
+     * \copydoc BaseMapper::toElement
+     */
     template <std::size_t i, typename std::enable_if_t<(i == 1), int> = 0>
     const typename GridView<i>::template Codim<0>::Entity toElement(MortarElement e) const
     {
@@ -249,27 +428,14 @@ public:
         return E;
     }
 
-    unsigned size() const
+    //! Returns the projection between domains
+    ElementMap &projectionMap()
     {
-        return mortarView_.size(0);
+        return map_;
     }
-    unsigned size(int i) const
-    {
-        switch (i)
-        {
-        case 0:
-            return gridView0_.size(0);
-        case 1:
-            return gridView1_.size(0);
-        default:
-            assert(false);
-        }
-    }
-
-protected:
 
     /*!
-     * \brief Reads the projections from file and assign it to the mapper
+     * \copydoc BaseMapper::setMapFromFile
      */
     void setMapFromFile(const std::string &file_name)
     {
@@ -280,84 +446,22 @@ protected:
         setElementMapFromIndices(indexMap);
     }
 
-
-    void findMap()
-    {
-        findFaceMap();
-        findElementMap();
-    }
-
-    void findFaceMap(double offset = 0)
-    {
-        const auto &idxSetMortar = mortarView_.indexSet();
-        const auto &idxSetGrid = gridView0_.indexSet();
-        for (const auto &mortarEle : elements(mortarView_))
-        {
-            const auto &mc = mortarEle.geometry().center();
-            std::cout << "mc: " << mc[0] << ",  " << mc[1] << std::endl;
-            bool foundMap = false;
-            for (const auto &ele : elements(gridView0_))
-            {
-                for (const auto &intersection : intersections(gridView0_, ele))
-                {
-                    const auto &fc = intersection.geometry().center();
-                    bool equal = true;
-                    for (int dim = 0; dim < dimWorld; ++dim)
-                    {
-                        equal = equal && (std::abs(fc[dim] - mc[dim]) < 1e-10);
-                    }
-                    if (equal)
-                    {
-                        //map[idxSetMortar.index(e)] = idxSetGrid.index(facet);
-                        std::get<0>(map_)[idxSetMortar.index(mortarEle)] = intersection;
-                        foundMap = true;
-                        break;
-                    }
-                }
-                if (foundMap)
-                    break;
-            }
-            if (!foundMap)
-            {
-                assert(false), "Could not find map. Are you sure the grids match?";
-            }
-        }
-    }
-
-    void findElementMap(double offset = 0)
-    {
-        const auto &idxSetMortar = mortarView_.indexSet();
-        const auto &idxSetGrid = gridView1_.indexSet();
-        for (const auto &mortarEle : elements(mortarView_))
-        {
-            const auto &mc = mortarEle.geometry().center();
-            bool foundMap = false;
-            for (const auto &ele : elements(gridView1_))
-            {
-                const auto &fc = ele.geometry().center();
-                bool equal = true;
-                for (int dim = 0; dim < dimWorld; ++dim)
-                {
-                    equal = equal && (std::abs(fc[dim] - mc[dim]) < 1e-10);
-                }
-                if (equal)
-                {
-                    //map[idxSetMortar.index(e)] = idxSetGrid.index(facet);
-                    std::get<1>(map_)[idxSetMortar.index(mortarEle)] = ele;
-                    foundMap = true;
-                    break;
-                }
-            }
-            if (!foundMap)
-            {
-                assert(false), "Could not find map. Are you sure the grids match?";
-            }
-        }
-    }
-
     /*!
-     * \brief Reads the intersection and element indices from file
+     * \copydoc BaseMapper::calculateMap
+     * 
+     * The projections are calculated by comparing the intersection centers of the first
+     * subdomain with the mortar cell centers, and the cell centers of the second subdomain
+     * with the mortar cell centers. This assumes that the subdomain grids and mortar grid are
+     * matching.
      */
+    void calculateMap()
+    {
+        this->template calculateFaceMap_<0>(this->gridView0_);
+        this->template calculateElementMap_<1>(this->gridView1_);
+    }
+
+protected:
+    // Reads the intersection and element indices from file
     void readIndicesFromFile(const std::string &file_name, std::array<std::vector<int>, 4> &indexMap) const
     {
         std::string line;
@@ -379,29 +483,28 @@ protected:
             throw std::runtime_error("Could not read file");
     }
 
-    /*!
-     * \brief Assigns intersections to mapper from index map
-     */
+    // Assigns intersections to mapper from index map
     void setFaceMapFromIndices(const std::array<std::vector<int>, 4> &indexMap)
     {
-        const auto &idxSetMortar = mortarView_.indexSet();
-        const auto &idxSetGrid = gridView0_.indexSet();
-        for (const auto &mortarEle : elements(mortarView_))
+        const auto &idxSetMortar = this->mortarView_.indexSet();
+        const auto &idxSetGrid = this->gridView0_.indexSet();
+        auto &map = asImp_().projectionMap();
+        for (const auto &mortarEle : elements(this->mortarView_))
         {
             const int mortarIdx = idxSetMortar.index(mortarEle);
             bool foundMap = false;
             if (indexMap[0][mortarIdx + 1] - indexMap[0][mortarIdx] != 1)
                 throw std::runtime_error("Mortar must map to exactly 1 face");
-            for (const auto &ele : elements(gridView0_))
+            for (const auto &ele : elements(this->gridView0_))
             {
-                for (const auto &intersection : intersections(gridView0_, ele))
+                for (const auto &intersection : intersections(this->gridView0_, ele))
                 {
                     const int subIdx = intersection.indexInInside();
                     const int faceIdx = idxSetGrid.subIndex(ele, subIdx, 1);
                     if (indexMap[1][mortarIdx] == faceIdx)
                     {
                         //map[idxSetMortar.index(e)] = idxSetGrid.index(facet);
-                        std::get<0>(map_)[mortarIdx] = intersection;
+                        std::get<0>(map)[mortarIdx] = intersection;
                         foundMap = true;
                         const auto &fc = intersection.geometry().center();
                         const auto &mc = mortarEle.geometry().center();
@@ -423,17 +526,20 @@ protected:
             }
         }
     }
+
+    // Assigns intersections to mapper from index map
     void setElementMapFromIndices(const std::array<std::vector<int>, 4> &indexMap)
     {
-        const auto &idxSetMortar = mortarView_.indexSet();
-        const auto &idxSetGrid = gridView1_.indexSet();
-        for (const auto &mortarEle : elements(mortarView_))
+        const auto &idxSetMortar = this->mortarView_.indexSet();
+        const auto &idxSetGrid = this->gridView1_.indexSet();
+
+        for (const auto &mortarEle : elements(this->mortarView_))
         {
             const auto mortarIdx = idxSetMortar.index(mortarEle);
             bool foundMap = false;
             if (indexMap[2][mortarIdx + 1] - indexMap[2][mortarIdx] != 1)
                 throw std::runtime_error("Mortar must map to exactly 1 face");
-            for (const auto &ele : elements(gridView1_))
+            for (const auto &ele : elements(this->gridView1_))
             {
                 int idx = idxSetGrid.index(ele);
                 if (indexMap[3][mortarIdx] == idxSetGrid.index(ele))
@@ -451,10 +557,20 @@ protected:
         }
     }
 
+private:
+    //! Returns the implementation of the problem (i.e. static polymorphism)
+    Implementation &asImp_()
+    {
+        return *static_cast<Implementation *>(this);
+    }
+    //! \copydoc asImp_()
+    const Implementation &asImp_() const
+    {
+        return *static_cast<const Implementation *>(this);
+    }
+
+protected:
     ElementMap map_;
-    const MortarView &mortarView_;
-    const GridView<0> &gridView0_;
-    const GridView<1> &gridView1_;
 };
 
 } // namespace Opm
