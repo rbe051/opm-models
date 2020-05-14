@@ -118,6 +118,9 @@ public:
                       << std::flush;
         }
         UnstructuredGrid *grid = read_grid(c_str);
+        if (grid==nullptr)
+            throw std::runtime_error("RuntimeError: MultiDomainVanguard could not read grid file: " + gridFileName+ ". Are you sure the filename is correct?");
+            
         if (verbose_)
         {
             std::cout << "finished " << std::endl
