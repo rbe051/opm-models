@@ -28,6 +28,8 @@
 #ifndef EWOMS_ECFV_COUPLING_STENCIL_HH
 #define EWOMS_ECFV_COUPLING_STENCIL_HH
 
+#include <opm/material/common/ConditionalStorage.hpp>
+
 #include <dune/common/version.hh>
 #include <vector>
 
