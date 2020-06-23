@@ -31,20 +31,19 @@
 
 #include <opm/models/utils/propertysystem.hh>
 
+#include <opm/material/densead/Math.hpp>
 #include <opm/models/discretization/common/fvbaseproperties.hh>
 #include <opm/models/multiDomain/couplingelementcontext.hh>
 #include <opm/models/multiDomain/multidomainproperties.hh>
-#include <opm/material/densead/Math.hpp>
 
-#include <dune/grid/common/intersection.hh>
 #include <dune/common/indices.hh>
+#include <dune/grid/common/intersection.hh>
 
 BEGIN_PROPERTIES
 NEW_PROP_TAG(CouplerTypeTag);
 END_PROPERTIES
 
-namespace Opm
-{
+namespace Opm {
 /*!
  * \ingroup MultiDomainModel
  *
@@ -57,12 +56,12 @@ namespace Opm
  * 
 */
 template <class TypeTag>
-class MultiDomainLinearizer
-{
+class MultiDomainLinearizer {
+    using Simulator = typename GET_PROP_TYPE(TypeTag, Simulator);
     template <std::size_t i>
     using Coupler = typename GET_PROP_TYPE(TypeTag, CouplerTypeTag)::template Coupler<i>;
     template <std::size_t i>
-    using Simulator = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template Simulator<i>;
+    using SubSimulator = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template Simulator<i>;
     template <std::size_t i>
     using Stencil = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template Stencil<i>;
     template <std::size_t i>
@@ -72,7 +71,7 @@ class MultiDomainLinearizer
 
     template <std::size_t i>
     using Element = typename GridView<i>::template Codim<0>::Entity;
-    using Simulators = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template TupleOfSharedPtr<Simulator>;
+    using Simulators = typename GET_PROP_TYPE(TypeTag, SubTypeTag)::template TupleOfSharedPtr<SubSimulator>;
     using Couplers = typename GET_PROP_TYPE(TypeTag, CouplerTypeTag)::template TupleOfSharedPtr<Coupler>;
 
 public:
@@ -86,9 +85,9 @@ public:
      * have been allocated. We cannot assume that they are fully
      * initialized, though.
      */
-    void init(Simulators &simulators, Couplers &couplers)
+    void init(Simulator& simulator, Couplers& couplers)
     {
-        simulators_ = &simulators;
+        simulator_ = &simulator;
         couplers_ = &couplers;
     }
     /*!
@@ -133,17 +132,16 @@ public:
         // we defer the initialization of the Jacobian matrix until here because the
         // auxiliary modules usually assume the problem, model and grid to be fully
         // initialized...
-        if (firstIteration_)
-        {
+        if (firstIteration_) {
             initFirstIteration_();
         }
         resetSystem_(); // reset the global linear system of equations.
 
         using namespace Dune::Hybrid;
         forEach(integralRange(Dune::Hybrid::size(jacobian_)), [&](const auto I) {
-            std::get<I>(*simulators_)->model().linearizer().linearizeDomain();
-            std::get<I>(*simulators_)->model().linearizer().linearizeAuxiliaryEquations();
-            std::get<I>(*simulators_)->model().linearizer().finalize();
+            simulator_->template model<I>().linearizer().linearizeDomain();
+            simulator_->template model<I>().linearizer().linearizeAuxiliaryEquations();
+            simulator_->template model<I>().linearizer().finalize();
         });
 
         forEach(integralRange(Dune::Hybrid::size(*couplers_)), [&](const auto I) {
@@ -166,7 +164,7 @@ public:
     /*!
      * \brief Return reference to global Jacobian matrix backend.
      */
-    JacobianMatrix &jacobian()
+    JacobianMatrix& jacobian()
     {
         return jacobian_;
     }
@@ -174,33 +172,27 @@ public:
     /*!
      * \brief Return reference to global residual vector.
      */
-    GlobalEqVector &residual()
+    GlobalEqVector& residual()
     {
         return residual_;
     }
 
 private:
     template <std::size_t i>
-    Simulator<i> &simulator_() const
-    {
-        return *(std::get<i>(*simulators_));
-    }
-
-    template <std::size_t i>
-    Coupler<i> &coupler_() const
+    Coupler<i>& coupler_() const
     {
         return *(std::get<i>(*couplers_));
     }
     template <std::size_t i>
-    auto &model_() const
+    auto& model_() const
     {
-        return simulator_<i>().model();
+        return simulator_->template model<i>();
     }
 
     template <std::size_t i>
-    auto &gridView_() const
+    auto& gridView_() const
     {
-        return simulator_<i>().gridView();
+        return simulator_->template gridView<i>();
     }
 
     void initFirstIteration_()
@@ -214,7 +206,7 @@ private:
 
     // Add the subdomain jacobian to the global jacobian
     template <std::size_t i, std::size_t j, class Jac>
-    void addToJacobian(Dune::index_constant<i> I, Dune::index_constant<j> J, const Jac &localJac)
+    void addToJacobian(Dune::index_constant<i> I, Dune::index_constant<j> J, const Jac& localJac)
     {
         Dune::index_constant<0> _0;
         Dune::index_constant<1> _1;
@@ -226,7 +218,7 @@ private:
 
     // Add the subdomain residual to the global residual
     template <std::size_t i, std::size_t j, class Res>
-    void addToResidual(Dune::index_constant<i> I, Dune::index_constant<j> J, const Res &localRes)
+    void addToResidual(Dune::index_constant<i> I, Dune::index_constant<j> J, const Res& localRes)
     {
         Dune::index_constant<0> _0;
         Dune::index_constant<1> _1;
@@ -248,8 +240,8 @@ private:
     void setJacobianBuildMode_()
     {
         using namespace Dune::Hybrid;
-        forEach(jacobian_, [](auto &jacRow) {
-            forEach(jacRow, [](auto &jacBlock) {
+        forEach(jacobian_, [](auto& jacRow) {
+            forEach(jacRow, [](auto& jacBlock) {
                 using BlockType = std::decay_t<decltype(jacBlock)>;
                 if (jacBlock.buildMode() == BlockType::BuildMode::unknown)
                     jacBlock.setBuildMode(BlockType::BuildMode::random);
@@ -261,7 +253,7 @@ private:
 
     // Reserve the sparcity pattern for a local matrix.
     template <std::size_t i, std::size_t j, class Set>
-    void reserve_(const std::vector<Set> &sparsityPattern)
+    void reserve_(const std::vector<Set>& sparsityPattern)
     {
         Dune::index_constant<i> I;
         Dune::index_constant<j> J;
@@ -279,8 +271,7 @@ private:
         // fill the rows with indices. each degree of freedom talks to
         // all of its neighbors. (it also talks to itself since
         // degrees of freedom are sometimes quite egocentric.)
-        for (size_t dofIdx = 0; dofIdx < rows_; ++dofIdx)
-        {
+        for (size_t dofIdx = 0; dofIdx < rows_; ++dofIdx) {
             auto nIt = sparsityPattern[dofIdx].begin();
             auto nEndIt = sparsityPattern[dofIdx].end();
             for (; nIt != nEndIt; ++nIt)
@@ -312,12 +303,9 @@ private:
 
         jacobian_[I][J].setSize(rows_, cols_);
         residual_[I].resize(rows_);
-        if (i == j)
-        {
+        if (i == j) {
             addDiagonalPattern_<i>(sparsityPattern);
-        }
-        else
-        {
+        } else {
             addOffDiagonalPattern_<i, j>(sparsityPattern);
         }
 
@@ -329,7 +317,7 @@ private:
 
     // add the sparcity pattern of the off diagonal matrices
     template <std::size_t i, std::size_t j, class Set>
-    void addOffDiagonalPattern_(std::vector<Set> &sparsityPattern)
+    void addOffDiagonalPattern_(std::vector<Set>& sparsityPattern)
     {
         // chekc if there is a coupling between domain i and j
         using namespace Dune::Hybrid;
@@ -348,12 +336,12 @@ private:
     // TODO: this assumes that the submodels and coupler uses an
     // ecfv discretization (tpfa).
     template <std::size_t k, class Set>
-    void addCouplerPattern_(bool swap, Set &sparsityPattern)
+    void addCouplerPattern_(bool swap, Set& sparsityPattern)
     {
-        const auto &model0 = coupler_<k>().template model<0>();
-        const auto &model1 = coupler_<k>().template model<1>();
-        const auto &mortarView = coupler_<k>().mortarView();
-        const auto &map = coupler_<k>().projectionMapper();
+        const auto& model0 = coupler_<k>().template model<0>();
+        const auto& model1 = coupler_<k>().template model<1>();
+        const auto& mortarView = coupler_<k>().mortarView();
+        const auto& map = coupler_<k>().projectionMapper();
         // find out the global indices of the neighboring degrees of
         // freedom of each primary degree of freedom
         typedef std::set<unsigned> NeighborSet;
@@ -363,9 +351,8 @@ private:
         else
             numDofs = model1.numTotalDof();
 
-        const auto &idxSet = mortarView.indexSet();
-        for (const auto &elem : elements(mortarView))
-        {
+        const auto& idxSet = mortarView.indexSet();
+        for (const auto& elem : elements(mortarView)) {
             const auto idx = idxSet.index(elem);
 
             const auto element0 = map.template toElement<0>(elem);
@@ -385,7 +372,7 @@ private:
     // should be taken from each submodel. Hoverer, the domain coupler also
     // only works for ecfv discretization, so keep this for now.
     template <std::size_t i, class Set>
-    void addDiagonalPattern_(std::vector<Set> &sparsityPattern) const
+    void addDiagonalPattern_(std::vector<Set>& sparsityPattern) const
     {
         // for the main model, find out the global indices of the neighboring degrees of
         // freedom of each primary degree of freedom
@@ -393,17 +380,14 @@ private:
 
         auto elemIt = gridView_<i>().template begin<0>();
         const auto elemEndIt = gridView_<i>().template end<0>();
-        for (; elemIt != elemEndIt; ++elemIt)
-        {
-            const Element<i> &elem = *elemIt;
+        for (; elemIt != elemEndIt; ++elemIt) {
+            const Element<i>& elem = *elemIt;
             stencil.update(elem);
 
-            for (unsigned primaryDofIdx = 0; primaryDofIdx < stencil.numPrimaryDof(); ++primaryDofIdx)
-            {
+            for (unsigned primaryDofIdx = 0; primaryDofIdx < stencil.numPrimaryDof(); ++primaryDofIdx) {
                 unsigned myIdx = stencil.globalSpaceIndex(primaryDofIdx);
 
-                for (unsigned dofIdx = 0; dofIdx < stencil.numDof(); ++dofIdx)
-                {
+                for (unsigned dofIdx = 0; dofIdx < stencil.numDof(); ++dofIdx) {
                     unsigned neighborIdx = stencil.globalSpaceIndex(dofIdx);
                     sparsityPattern[myIdx].insert(neighborIdx);
                 }
@@ -417,12 +401,12 @@ private:
             model_<i>().auxiliaryModule(auxModIdx)->addNeighbors(sparsityPattern);
     }
 
-    Simulators *simulators_;
-    Couplers *couplers_;
+    Simulator* simulator_;
+    Couplers* couplers_;
     GlobalEqVector residual_;
     JacobianMatrix jacobian_;
 
-    bool firstIteration_{true};
+    bool firstIteration_ { true };
 };
 
 } // namespace Opm

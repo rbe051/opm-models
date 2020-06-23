@@ -132,6 +132,16 @@ public:
     using type = typename makeMatrix<Indices>::type;
 };
 
+//! helper alias to create a tuple of ptr<...> from an indexed type
+template <template <std::size_t> class T, class Indices>
+struct MultiDomainTuplePtr
+{
+    template <std::size_t i>
+    using PtrType = T<i>*;
+
+    using type = typename makeFromIndexedType<std::tuple, PtrType, Indices>::type;
+};
+
 //! helper alias to create a tuple of shared_ptr<...> from an indexed type
 template <template <std::size_t> class T, class Indices>
 struct MultiDomainTupleSharedPtr
@@ -248,6 +258,10 @@ public:
     template <template <std::size_t> class T>
     using Tuple = typename makeFromIndexedType<std::tuple, T, Indices>::type;
 
+
+    //! helper alias to create tuple<ptr<...>> from indexed type
+    template <template <std::size_t> class T>
+    using TupleOfPtr = typename MultiDomainTuplePtr<T, Indices>::type;
     //! helper alias to create tuple<std::shared_ptr<...>> from indexed type
     template <template <std::size_t> class T>
     using TupleOfSharedPtr = typename MultiDomainTupleSharedPtr<T, Indices>::type;
