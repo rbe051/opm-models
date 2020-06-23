@@ -274,7 +274,7 @@ public:
                     for (unsigned j = 0; j < dimWorld; ++j)
                         K[i][j] = Opm::harmonicMean(K0[i][j], K1[i][j]);
             }
-            else
+            else if (true)
             {
                 // The harmonic mean is not sufficient when the two subdomains are of different dimension.
                 // We then have to scale the permeability by the distance to the interface (which for the
@@ -283,12 +283,26 @@ public:
                 K *= K1[0][0];
                 Scalar ndotDist = 0.0;
                 Scalar extrusionFactor1 = elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).extrusionFactor();
-                Scalar aperture = std::pow(extrusionFactor1, Grid<1>::dimension - dimWorld);
+                Scalar aperture = std::pow(extrusionFactor1, 1.0 / (dimWorld - Grid<1>::dimension));
 
                 for (unsigned dimIdx = 0; dimIdx < faceNormal.size(); ++dimIdx)
                     ndotDist += (exteriorPos[dimIdx] - interiorPos[dimIdx]) * faceNormal[dimIdx];
-                K /= K1[0][0] + K0[0][0] * aperture / 2 * ndotDist / distSquared;
+                K /= K1[0][0] + K0[0][0] * aperture / 2.0 * ndotDist / distSquared;
             }
+            else{
+                Scalar Kn = 1e8;
+                K = K0;
+                K *= Kn;
+                Scalar ndotDist = 0.0;
+                Scalar extrusionFactor1 = elemCtx.template intensiveQuantities<1>(0, /*timeIdx=*/0).extrusionFactor();
+                Scalar aperture = std::pow(extrusionFactor1, 1 / (dimWorld - Grid<1>::dimension));
+
+                for (unsigned dimIdx = 0; dimIdx < faceNormal.size(); ++dimIdx)
+                    ndotDist += (exteriorPos[dimIdx] - interiorPos[dimIdx]) * faceNormal[dimIdx];
+                K /= Kn + K0[0][0] * aperture / 2 * ndotDist / distSquared;
+
+            }
+
             EvalDimVector filterVelocity;
             K.mv(quantityGrad, filterVelocity);
 
