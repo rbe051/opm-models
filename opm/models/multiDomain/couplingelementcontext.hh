@@ -286,6 +286,13 @@ public:
     }
 
     /*!
+     * \brief Return a reference to the problem of a subdomain.
+     */
+    template<std::size_t i>
+    const auto& problem() const
+    { return std::get<i>(subElemContext).problem();}
+
+    /*!
      * \brief Return the global spatial index for a sub-control volume of a subdomain
      * 
      * The template parameter defines which subdomain the global index referes to.

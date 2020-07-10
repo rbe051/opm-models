@@ -33,8 +33,7 @@
 #include <dune/common/version.hh>
 #include <vector>
 
-namespace Opm
-{
+namespace Opm {
 /*!
  * \ingroup multiDomain
  *
@@ -50,15 +49,13 @@ namespace Opm
  * two subdomains are also ecfv.
  */
 template <class Scalar,
-          class GridView,
-          class Mapper,
-          class SubTypeTag,
-          bool needFaceIntegrationPos = true,
-          bool needFaceNormal = true>
-class EcfvCouplingStencil 
-{
-    enum
-    {
+    class GridView,
+    class Mapper,
+    class SubTypeTag,
+    bool needFaceIntegrationPos = true,
+    bool needFaceNormal = true>
+class EcfvCouplingStencil {
+    enum {
         dimWorld = GridView::dimensionworld
     };
     typedef typename GridView::template Codim<0>::Entity MortarElement;
@@ -83,8 +80,7 @@ public:
      * element
      */
     template <int i>
-    class SubControlVolume
-    {
+    class SubControlVolume {
     public:
         // default construct an uninitialized object.
         // this is only here because std::vector needs it...
@@ -92,20 +88,20 @@ public:
         {
         }
 
-        SubControlVolume(const SubElement<i> &element)
+        SubControlVolume(const SubElement<i>& element)
             : element_(element)
         {
             update();
         }
 
-        void update(const SubElement<i> &element)
+        void update(const SubElement<i>& element)
         {
             element_ = element;
         }
 
         void update()
         {
-            const auto &geometry = element_.geometry();
+            const auto& geometry = element_.geometry();
             centerPos_ = geometry.center();
             volume_ = geometry.volume();
         }
@@ -113,7 +109,7 @@ public:
         /*!
          * \brief The global position associated with the sub-control volume
          */
-        const GlobalPosition<i> &globalPos() const
+        const GlobalPosition<i>& globalPos() const
         {
             return centerPos_;
         }
@@ -121,7 +117,7 @@ public:
         /*!
          * \brief The center of the sub-control volume
          */
-        const GlobalPosition<i> &center() const
+        const GlobalPosition<i>& center() const
         {
             return centerPos_;
         }
@@ -147,21 +143,20 @@ public:
      * intersection
      */
     template <bool needIntegrationPos, bool needNormal, int i>
-    class CouplingSubControlVolumeFace
-    {
+    class CouplingSubControlVolumeFace {
     public:
         CouplingSubControlVolumeFace()
         {
         }
 
-        CouplingSubControlVolumeFace(const Intersection<i> &intersection, unsigned localNeighborIdx)
+        CouplingSubControlVolumeFace(const Intersection<i>& intersection, unsigned localNeighborIdx)
         {
             exteriorIdx_ = static_cast<unsigned short>(localNeighborIdx);
 
             if (needNormal)
                 (*normal_) = intersection.centerUnitOuterNormal();
 
-            const auto &geometry = intersection.geometry();
+            const auto& geometry = intersection.geometry();
             if (needIntegrationPos)
                 (*integrationPos_) = geometry.center();
             area_ = geometry.volume();
@@ -194,7 +189,7 @@ public:
          * \brief Returns the global position of the face's
          *        integration point.
          */
-        const GlobalPosition<i> &integrationPos() const
+        const GlobalPosition<i>& integrationPos() const
         {
             return *integrationPos_;
         }
@@ -203,7 +198,7 @@ public:
          * \brief Returns the outer unit normal at the face's
          *        integration point.
          */
-        const WorldVector<i> &normal() const
+        const WorldVector<i>& normal() const
         {
             return *normal_;
         }
@@ -227,8 +222,9 @@ public:
     template <std::size_t i>
     using SubControlVolumeFace = CouplingSubControlVolumeFace<needFaceIntegrationPos, needFaceNormal, i>;
 
-    EcfvCouplingStencil(const GridView &gridView, const Mapper &mapper)
-        : gridView_(gridView), elementMapper_(mapper)
+    EcfvCouplingStencil(const GridView& gridView, const Mapper& mapper)
+        : gridView_(gridView)
+        , elementMapper_(mapper)
     {
         // try to ensure that the mapper passed indeed maps elements
         assert(int(gridView.size(/*codim=*/0)) == int(elementMapper_.size()));
@@ -239,29 +235,29 @@ public:
      * 
      * The topology consist of the two subdomain elements that the mortar element couples.
      */
-    void updateTopology(const MortarElement &element)
+    void updateTopology(const MortarElement& element)
     {
         mortarElement_ = element;
 
-        const auto &intersection0 = elementMapper_.template toIntersection<0>(element);
+        const auto& intersection0 = elementMapper_.template toIntersection<0>(element);
         std::get<0>(elements_) = intersection0.inside();
         std::get<0>(subControlVolumes_).reset(new SubControlVolume<0>(intersection0.inside()));
         std::get<0>(couplingFaces_).reset(new SubControlVolumeFace<0>(intersection0, 0));
 
-        const auto &intersection1 = elementMapper_.template toIntersection<1>(element);
+        const auto& intersection1 = elementMapper_.template toIntersection<1>(element);
         std::get<1>(elements_) = intersection1.inside();
         std::get<1>(subControlVolumes_).reset(new SubControlVolume<1>(intersection1.inside()));
         std::get<1>(couplingFaces_).reset(new SubControlVolumeFace<1>(intersection1, 1));
     }
 
-    void update(const MortarElement &element)
+    void update(const MortarElement& element)
     {
         updateTopology(element);
     }
 
-    void updatePrimaryTopology(const MortarElement &element)
+    void updatePrimaryTopology(const MortarElement& element)
     {
-        const auto &intersection = elementMapper_.template toIntersection<0>(element);
+        const auto& intersection = elementMapper_.template toIntersection<0>(element);
         std::get<0>(elements_) = intersection.inside();
         std::get<0>(subControlVolumes_).reset(new SubControlVolume<0>(subControlVolumes_.inside()));
     }
@@ -282,7 +278,7 @@ public:
      *        in the interior of the domain.
      */
     template <std::size_t i>
-    const SubControlVolumeFace<i> &interiorFace(unsigned faceIdx) const
+    const SubControlVolumeFace<i>& interiorFace(unsigned faceIdx) const
     {
         return *(std::get<i>(couplingFaces_));
     }
@@ -291,7 +287,7 @@ public:
      *        given degree of freedom.
      */
     template <std::size_t i>
-    const SubControlVolume<i> &subControlVolume(unsigned dofIdx) const
+    const SubControlVolume<i>& subControlVolume(unsigned dofIdx) const
     {
         return *(std::get<i>(subControlVolumes_));
     }
@@ -300,7 +296,7 @@ public:
      * \brief Return the element given the index of a degree of
      *        freedom.
      */
-    const MortarElement &element(unsigned dofIdx) const
+    const MortarElement& element(unsigned dofIdx) const
     {
         assert(0 == dofIdx);
 
@@ -311,7 +307,7 @@ public:
      *        freedom.
      */
     template <std::size_t i>
-    const SubElement<i> &subElement(unsigned dofIdx) const
+    const SubElement<i>& subElement(unsigned dofIdx) const
     {
         assert(0 <= dofIdx && dofIdx < numDof());
 
@@ -332,8 +328,8 @@ public:
     }
 
 protected:
-    const GridView &gridView_;
-    const Mapper &elementMapper_;
+    const GridView& gridView_;
+    const Mapper& elementMapper_;
 
     MortarElement mortarElement_;
     std::tuple<SubElement<0>, SubElement<1>> elements_;
@@ -357,13 +353,12 @@ protected:
  * two subdomains are also ecfv.
  */
 template <class Scalar,
-          class GridView,
-          class Mapper,
-          class SubTypeTag,
-          bool needFaceIntegrationPos = true,
-          bool needFaceNormal = true>
-class EcfvMixedDimStencil : public EcfvCouplingStencil<Scalar, GridView, Mapper, SubTypeTag, needFaceIntegrationPos, needFaceNormal>
-{
+    class GridView,
+    class Mapper,
+    class SubTypeTag,
+    bool needFaceIntegrationPos = true,
+    bool needFaceNormal = true>
+class EcfvMixedDimStencil : public EcfvCouplingStencil<Scalar, GridView, Mapper, SubTypeTag, needFaceIntegrationPos, needFaceNormal> {
     typedef EcfvCouplingStencil<Scalar, GridView, Mapper, SubTypeTag, needFaceIntegrationPos, needFaceNormal> ParentType;
     typedef typename GridView::template Codim<0>::Entity MortarElement;
 
@@ -375,20 +370,20 @@ public:
      * 
      * The topology consist of the two subdomain elements that the mortar element couples.
      */
-    void updateTopology(const MortarElement &element)
+    void updateTopology(const MortarElement& element)
     {
         this->mortarElement_ = element;
 
-        const auto &intersection0 = this->elementMapper_.template toIntersection<0>(element);
+        const auto& intersection0 = this->elementMapper_.template toIntersection<0>(element);
         std::get<0>(this->elements_) = intersection0.inside();
         std::get<0>(this->subControlVolumes_).reset(new typename ParentType::template SubControlVolume<0>(intersection0.inside()));
         std::get<0>(this->couplingFaces_).reset(new typename ParentType::template SubControlVolumeFace<0>(intersection0, 0));
 
-        const auto &element1 = this->elementMapper_.template toElement<1>(element);
+        const auto& element1 = this->elementMapper_.template toElement<1>(element);
         std::get<1>(this->elements_) = element1;
         std::get<1>(this->subControlVolumes_).reset(new typename ParentType::template SubControlVolume<1>(element1));
     }
-    void update(const MortarElement &element)
+    void update(const MortarElement& element)
     {
         updateTopology(element);
     }
