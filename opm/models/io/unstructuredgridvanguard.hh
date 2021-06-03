@@ -43,7 +43,7 @@ class UnstructuredGridVanguard : public BaseVanguard<TypeTag> {
     using Simulator = GetPropType<TypeTag, Properties::Simulator>;
     using Grid = GetPropType<TypeTag, Properties::Grid>;
 
-    using GridPointer = std::unique_ptr<Grid>;
+    using GridPointer = Dune::GridPtr< Grid >;
 
    public:
     /*!
@@ -75,9 +75,9 @@ class UnstructuredGridVanguard : public BaseVanguard<TypeTag> {
                 gridFileName + ". Are you sure the filename is correct?";
             throw std::runtime_error(msg);
         }
-        Grid::UnstructuredGridPtr ugPtr( grid );
-        Dune::GridPtr< Grid > polygrid( new Grid(*ugPtr) );
-        gridPtr_ = std::move(polygrid);
+        ugPtr_.reset(std::move( grid ));
+        //GridPointer polygrid( new Grid(*ugPtr) );
+        gridPtr_ = new Grid(*ugPtr_);//std::move(polygrid);
         if (numRefinments > 0) {
             gridPtr_->globalRefine(static_cast<int>(numRefinments));
         }
@@ -97,6 +97,7 @@ class UnstructuredGridVanguard : public BaseVanguard<TypeTag> {
 
    private:
     GridPointer gridPtr_;
+    typename Grid::UnstructuredGridPtr ugPtr_;
 };
 
 }  // namespace Opm
