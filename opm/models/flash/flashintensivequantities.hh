@@ -79,7 +79,7 @@ class FlashIntensiveQuantities
     using FlashSolver = GetPropType<TypeTag, Properties::FlashSolver>;
 
     using ComponentVector = Dune::FieldVector<Evaluation, numComponents>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
 
     using FluxIntensiveQuantities = typename FluxModule::FluxIntensiveQuantities;
     using DiffusionIntensiveQuantities = Opm::DiffusionIntensiveQuantities<TypeTag, enableDiffusion>;

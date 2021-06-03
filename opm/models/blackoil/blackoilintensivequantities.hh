@@ -98,7 +98,7 @@ class BlackOilIntensiveQuantities
     static const bool waterEnabled = Indices::waterEnabled;
 
     using Toolbox = Opm::MathToolbox<Evaluation>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
     using FluxIntensiveQuantities = typename FluxModule::FluxIntensiveQuantities;
     using FluidState = Opm::BlackOilFluidState<Evaluation, FluidSystem, enableTemperature, enableEnergy, compositionSwitchEnabled,  enableBrine, Indices::numPhases >;
 

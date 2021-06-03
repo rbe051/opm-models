@@ -65,7 +65,7 @@ class RichardsIntensiveQuantities
     enum { dimWorld = GridView::dimensionworld };
 
     using FluxIntensiveQuantities = typename FluxModule::FluxIntensiveQuantities;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
     using ScalarPhaseVector = Dune::FieldVector<Scalar, numPhases>;
     using PhaseVector = Dune::FieldVector<Evaluation, numPhases>;
     using Toolbox = Opm::MathToolbox<Evaluation>;

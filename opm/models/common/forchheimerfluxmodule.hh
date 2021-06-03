@@ -229,7 +229,7 @@ class ForchheimerExtensiveQuantities
 
     using DimVector = Dune::FieldVector<Scalar, dimWorld>;
     using DimEvalVector = Dune::FieldVector<Evaluation, dimWorld>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
     using DimEvalMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
 
 public:

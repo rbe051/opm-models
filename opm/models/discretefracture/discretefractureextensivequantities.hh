@@ -54,7 +54,7 @@ class DiscreteFractureExtensiveQuantities : public ImmiscibleExtensiveQuantities
     enum { dimWorld = GridView::dimensionworld };
     enum { numPhases = FluidSystem::numPhases };
 
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
     using DimVector = Dune::FieldVector<Scalar, dimWorld>;
 
 public:

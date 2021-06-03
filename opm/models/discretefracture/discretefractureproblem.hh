@@ -57,7 +57,7 @@ class DiscreteFractureProblem
     using Simulator = GetPropType<TypeTag, Properties::Simulator>;
 
     enum { dimWorld = GridView::dimensionworld };
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
 
 public:
     /*!

@@ -69,7 +69,7 @@ class MultiPhaseBaseProblem
     enum { dimWorld = GridView::dimensionworld };
     enum { numPhases = getPropValue<TypeTag, Properties::NumPhases>() };
     using DimVector = Dune::FieldVector<Scalar, dimWorld>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
 //! \endcond
 
 public:
@@ -368,7 +368,7 @@ protected:
      *
      * \param val The scalar value which should be expressed as a tensor
      */
-    DimMatrix toDimMatrix_(Scalar val) const
+    DimMatrix toDimMatrix_(Evaluation val) const
     {
         DimMatrix ret(0.0);
         for (unsigned i = 0; i < DimMatrix::rows; ++i)

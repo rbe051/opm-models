@@ -70,7 +70,7 @@ class ImmiscibleIntensiveQuantities
     enum { dimWorld = GridView::dimensionworld };
 
     using Toolbox = Opm::MathToolbox<Evaluation>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
     using PhaseVector = Dune::FieldVector<Scalar, numPhases>;
     using EvalPhaseVector = Dune::FieldVector<Evaluation, numPhases>;
 

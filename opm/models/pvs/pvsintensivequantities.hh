@@ -85,7 +85,7 @@ class PvsIntensiveQuantities
 
     using PhaseVector = Dune::FieldVector<Scalar, numPhases>;
     using EvalPhaseVector = Dune::FieldVector<Evaluation, numPhases>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
 
     using FluxIntensiveQuantities = typename FluxModule::FluxIntensiveQuantities;
     using DiffusionIntensiveQuantities = Opm::DiffusionIntensiveQuantities<TypeTag, enableDiffusion>;

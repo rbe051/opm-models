@@ -129,7 +129,7 @@ class DarcyExtensiveQuantities
     using ParameterCache = typename FluidSystem::template ParameterCache<Evaluation>;
     using EvalDimVector = Dune::FieldVector<Evaluation, dimWorld>;
     using DimVector = Dune::FieldVector<Scalar, dimWorld>;
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
 
 public:
     /*!
@@ -320,6 +320,7 @@ protected:
             else
                 mobility_[phaseIdx] = Toolbox::value(up.mobility(phaseIdx));
         }
+
     }
 
     /*!
@@ -513,7 +514,7 @@ protected:
         assert(Opm::isfinite(mobility_[phaseIdx]));
         for (unsigned i = 0; i < K_.M(); ++ i)
             for (unsigned j = 0; j < K_.N(); ++ j)
-                assert(std::isfinite(K_[i][j]));
+                assert(Opm::isfinite(K_[i][j]));
 #endif
 
         K_.mv(potentialGrad_[phaseIdx], filterVelocity_[phaseIdx]);

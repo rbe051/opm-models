@@ -65,7 +65,7 @@ class DiscreteFractureIntensiveQuantities : public ImmiscibleIntensiveQuantities
     enum { enableEnergy = getPropValue<TypeTag, Properties::EnableEnergy>() };
     enum { wettingPhaseIdx = MaterialLaw::wettingPhaseIdx };
     enum { nonWettingPhaseIdx = MaterialLaw::nonWettingPhaseIdx };
-    using DimMatrix = Dune::FieldMatrix<Scalar, dimWorld, dimWorld>;
+    using DimMatrix = Dune::FieldMatrix<Evaluation, dimWorld, dimWorld>;
     using FluidState = Opm::ImmiscibleFluidState<Scalar, FluidSystem,
                                                  /*storeEnthalpy=*/enableEnergy>;
 

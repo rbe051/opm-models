@@ -253,7 +253,7 @@ public:
                 const auto& K = problem.intrinsicPermeability(elemCtx, i, /*timeIdx=*/0);
                 for (unsigned rowIdx = 0; rowIdx < K.rows; ++rowIdx)
                     for (unsigned colIdx = 0; colIdx < K.cols; ++colIdx)
-                        intrinsicPermeability_[I][rowIdx][colIdx] = K[rowIdx][colIdx];
+                        intrinsicPermeability_[I][rowIdx][colIdx] = Opm::getValue(K[rowIdx][colIdx]);
             }
 
             for (unsigned phaseIdx = 0; phaseIdx < numPhases; ++phaseIdx) {
